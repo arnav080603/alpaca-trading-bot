@@ -1,0 +1,9 @@
+alpaca-py
+pandas
+numpy
+python-dotenv
+requests
+pyyaml
+pytest
+pytest-cov
+pillow

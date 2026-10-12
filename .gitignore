@@ -1,0 +1,16 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+data/
+logs/
+results/
+STOP
+state.json
+state.tmp
+run_forever.bat
+.coverage
+ai/context.json
+ai/decisions.json
+ai/history.jsonl
+.DS_Store

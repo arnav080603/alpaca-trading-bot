@@ -1,0 +1,112 @@
+# All tunable parameters live here. Code reads them; nothing is hard-coded.
+
+account:
+  starting_equity: 10000        # bot acts as a $10k account (Arnav, 2026-10-11: all 3 paper accounts at $10k). 40 x 2.5% = $250 each; 148 of 505 stocks cost more than $250/share and can't be bought
+  set_aside_extra: true         # live: act as a $10,000 account (starting_equity) inside the $100k paper account (Arnav, 2026-10-10)
+  allow_shorts: true            # on for paper testing
+  cash_account_mode: false      # true = no shorts, no margin, settled cash only (T+1)
+
+risk:
+  risk_per_trade: 0.01          # 1% of current equity
+  max_position_pct: 0.025       # 2.5% per position (was 25%): 40 small positions instead of 4 big ones
+  max_open_positions: 40        # was 4 in the spec; raised 2026-10-09 for ~2 trades/day (Arnav)
+  max_gross_exposure: 1.0       # 100% of equity, no leverage
+  correlation_lookback_days: 60 # block same-direction entries correlated above the threshold
+  correlation_threshold: 0.8
+  daily_kill_switch_pct: 0.05   # flatten + halt until next session at -5% on the day
+  stop_file: STOP               # create this file to flatten + halt; delete it to resume
+
+alerts:
+  mention: "@everyone"          # makes every ping buzz your phone; or "<@your user id>" to ping only you
+  watch_times: ["10:00", "14:30"]   # ET: setups closest to triggering + animated chart (weekends: BTC only)
+  daily_update_time: "16:15"   # ET; one Discord summary per day (every day: BTC trades weekends)
+
+data:
+  feed: sip                     # sip or iex (free plan can read historical sip older than 15 min)
+  start: "2021-01-01"           # Alpaca crypto history starts around here
+  end: null                     # null = up to now
+  cache_dir: data
+  live_feed: iex                # live bot: free plan gets real-time stocks only from IEX
+  live_lookback_days: 400       # history fetched each time the live bot evaluates a bar
+
+costs:
+  equity_slippage: 0.0002       # 0.02% per side
+  crypto_slippage: 0.0005       # 0.05% per side
+  crypto_fee: 0.0025            # per side; CONFIRM against Alpaca's current taker fee
+
+legs:
+  mean_reversion:
+    enabled: false              # cut 2026-10-09: no edge out of sample, even before costs
+    symbols: [SPY, QQQ]
+    timeframe_minutes: 15
+    lookback: 20                # SMA20 / StdDev20
+    z_entry: 2.0
+    atr_period: 14
+    stop_atr: 1.5
+    entry_start: "09:45"        # ET, only open new trades in this window
+    entry_end: "15:30"
+    flatten_time: "15:50"       # live bot; backtest exits at the 15:45 bar open (closest bar)
+
+  btc_breakout:
+    enabled: true               # 1h version failed (fees); redesigned 2026-10-09 to daily bars, same rules
+    symbols: [BTC/USD]
+    timeframe_minutes: 1440
+    breakout_lookback: 20
+    ema_period: 50
+    exit_low_lookback: 10
+    atr_period: 14
+    trail_atr: 2.0
+
+  commodity_trend:
+    enabled: false              # off 2026-10-09 (Arnav: "no gold no oil"); Bitcoin only
+    allow_shorts: false         # long-only on paper (2026-10-09): shorting hurt in both samples
+    symbols: [GLD, USO]
+    timeframe_minutes: 240      # resampled from 1-hour bars, two session buckets per day
+    ema_fast: 20
+    ema_slow: 50
+    atr_period: 14
+    stop_atr: 2.0
+
+  stock_trend:
+    enabled: true               # S&P 500 + picks, 40 positions: OOS PF 2.14, +36.8% (buy&hold +39.5%)
+    allow_shorts: false
+    live_feed: sip              # daily bars: yesterday's bar is long final, so SIP's 15-min delay doesn't matter
+    live_lookback_days: 700     # enough history for EMA100 to settle
+    symbols_file: universe_sp500.txt   # 505 stocks: S&P 500 + TSM, SPCX (SpaceX), PLTR, MU
+    timeframe_minutes: 1440     # daily bars
+    ema_fast: 10                # walk-forward pick on the first 70% (default was 20)
+    ema_slow: 100               # walk-forward pick on the first 70% (default was 50)
+    atr_period: 14
+    stop_atr: 2.0
+
+backtest:
+  in_sample_frac: 0.7           # parameters chosen on the first 70% only
+  min_in_sample_trades: 20      # a grid point needs this many trades to be eligible
+  select_mode: long_only        # params picked on long-only results (the real-account case)
+  grids:                        # small on purpose, to limit overfitting
+    mean_reversion:
+      z_entry: [1.5, 2.0, 2.5]
+      stop_atr: [1.0, 1.5, 2.0]
+    btc_breakout:
+      breakout_lookback: [10, 20, 40]
+      trail_atr: [1.5, 2.0, 3.0]
+    stock_trend:                # fixed: 10/100/2.0 were picked on the first 70% of the 12-stock test
+      ema_fast: [10]
+      ema_slow: [100]
+      stop_atr: [2.0]
+    commodity_trend:
+      ema_fast: [10, 20]
+      ema_slow: [50, 100]
+      stop_atr: [1.5, 2.0, 3.0]
+
+ai:                             # added 2026-10-10 (Arnav): AI vetoes rule entries + picks up to 10 stocks of its own
+  enabled: true                 # false = rules only, exactly as before
+  decisions_file: ai/decisions.json   # written hourly by the Claude scheduled task "trading-bot-ai"
+  context_file: ai/context.json       # written hourly by the bot for the task to read
+  max_age_minutes: 120          # older decisions are ignored (Claude app closed?) -> rules only
+  max_picks: 10                 # AI positions held at once; they count toward risk.max_open_positions
+  stop_atr: 2.0                 # AI picks get the same 2 x ATR server-side stop as the stock leg
+  max_hold_days: 20             # AI picks are sold after this many days if nothing else closed them
+
+journal:                        # added 2026-10-11: the bot keeps an Obsidian note up to date
+  dashboard: "../NEXUS Journal/Trading Bot/Bot Dashboard.md"   # positions, trades, daily results, AI; overwritten, don't edit
